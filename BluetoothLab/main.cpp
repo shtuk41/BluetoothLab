@@ -23,7 +23,7 @@ using namespace winrt::Windows::Devices::Bluetooth::Advertisement;
 using namespace winrt::Windows::Storage::Streams;
 
 
-IAsyncAction BLOperationAsync(DeviceInformation device, GattCharacteristic& myCharacteristic)
+IAsyncAction BLOperationAsync(DeviceInformation device, GattDeviceService &service_ref, GattCharacteristic& myCharacteristic)
 {
     auto bluetoothLeDevice = co_await BluetoothLEDevice::FromIdAsync(device.Id());
 
@@ -43,6 +43,7 @@ IAsyncAction BLOperationAsync(DeviceInformation device, GattCharacteristic& myCh
             {
                 if (service.Uuid().Data1 == 0x180d)
                 {
+                    service_ref = service;
                     GattCharacteristicsResult charactiristicResult = co_await service.GetCharacteristicsAsync();
 
                     if (charactiristicResult.Status() == GattCommunicationStatus::Success)
@@ -129,9 +130,11 @@ int main()
     deviceWatcher.Removed([](DeviceWatcher sender, DeviceInformationUpdate args)
         {
             // Handle device removed
+            std::cout << "REMOVED" << std::endl;
         });
 
     GattCharacteristic chr = GattCharacteristic(nullptr);
+    GattDeviceService service = GattDeviceService(nullptr);
 
     deviceWatcher.Start();
 
@@ -148,9 +151,18 @@ int main()
 
 
 
-            BLOperationAsync(device, chr).get();
+            BLOperationAsync(device, service, chr).get();
 
             chr.ValueChanged(function);
+
+            std::cout << "Press any key to disconnect" << std::endl;
+            key = _getwch();
+
+            chr.ValueChanged(function);
+
+            service.Close();
+
+            break;
         }
     }
 }
