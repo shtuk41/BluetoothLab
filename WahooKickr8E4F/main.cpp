@@ -22,8 +22,16 @@ using namespace winrt::Windows::Devices::Bluetooth;
 using namespace winrt::Windows::Devices::Bluetooth::Advertisement;
 using namespace winrt::Windows::Storage::Streams;
 
+void printUuid(const winrt::guid&g)
+{
+    std::cout << "[" << std::hex << g.Data1 << '-';
+    std::cout << g.Data2 << '-';
+    std::cout << g.Data3 << '-';
+    std::cout << g.Data4 << "]" << std::endl;
+}
 
-IAsyncAction BLOperationAsync(DeviceInformation device, GattDeviceService &service_ref, GattCharacteristic& myCharacteristic)
+
+IAsyncAction BLOperationAsync(DeviceInformation device, GattDeviceService& service_ref, GattCharacteristic& myCharacteristic)
 {
     auto bluetoothLeDevice = co_await BluetoothLEDevice::FromIdAsync(device.Id());
 
@@ -41,7 +49,10 @@ IAsyncAction BLOperationAsync(DeviceInformation device, GattDeviceService &servi
             int count = 0;
             for (auto service : services)
             {
-                if (service.Uuid().Data1 == 0x180d)
+                std::cout << "Service" << count << std::endl;
+               
+                printUuid(service.Uuid());
+                if (service.Uuid().Data1 == 0x1826)
                 {
                     service_ref = service;
                     GattCharacteristicsResult charactiristicResult = co_await service.GetCharacteristicsAsync();
@@ -55,20 +66,74 @@ IAsyncAction BLOperationAsync(DeviceInformation device, GattDeviceService &servi
                             std::cout << "___________________" << std::endl;
                             GattCharacteristicProperties properties = characteristic.CharacteristicProperties();
 
-                            if ((properties & GattCharacteristicProperties::Notify) == GattCharacteristicProperties::Notify)
+                            if (characteristic.Uuid().Data1 == 0x2ad9)
                             {
-                                std::cout << "Notify property found" << std::endl;
 
-                                GattCommunicationStatus status = co_await characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
-                                    GattClientCharacteristicConfigurationDescriptorValue::Notify);
-                                if (status == GattCommunicationStatus::Success)
+                                printUuid(characteristic.Uuid());
+
+                                if ((properties & GattCharacteristicProperties::Notify) == GattCharacteristicProperties::Notify)
                                 {
-                                    myCharacteristic = characteristic;
-                                    co_return;
+                                    std::cout << "Notify property found" << std::endl;
                                 }
+                                else if ((properties & GattCharacteristicProperties::Write) == GattCharacteristicProperties::Write)
+                                {
+                                    std::cout << "Write property found" << std::endl;
+                                }
+                                else if ((properties & GattCharacteristicProperties::Read) == GattCharacteristicProperties::Read)
+                                {
+                                    std::cout << "Read property found" << std::endl;
+                                }
+                                else if ((properties & GattCharacteristicProperties::WriteWithoutResponse) == GattCharacteristicProperties::WriteWithoutResponse)
+                                {
+                                    std::cout << "WriteWithoutResponse property found" << std::endl;
+                                }
+
+                                auto writer = DataWriter();
+                                writer.WriteByte(0x00);
+
+                                GattCommunicationStatus resultWrite = co_await characteristic.WriteValueAsync(writer.DetachBuffer());
+
+                                if (resultWrite == GattCommunicationStatus::Success)
+                                {
+                                    std::cout << "wrote 0x00\n";
+
+                                    writer.WriteByte(0x01);
+                                    resultWrite = co_await characteristic.WriteValueAsync(writer.DetachBuffer());
+
+                                    if (resultWrite == GattCommunicationStatus::Success)
+                                    {
+                                        std::cout << "wrote 0x01\n";
+
+                                        writer.WriteByte(0x01);
+                                        resultWrite = co_await characteristic.WriteValueAsync(writer.DetachBuffer());
+
+                                        if (resultWrite == GattCommunicationStatus::Success)
+                                        {
+                                            std::cout << "wrote 0x01\n";
+
+                                            writer.WriteByte(0x04);
+                                            writer.WriteByte(0);
+                                            resultWrite = co_await characteristic.WriteValueAsync(writer.DetachBuffer());
+
+                                            if (resultWrite == GattCommunicationStatus::Success)
+                                            {
+                                                std::cout << "wrote resistance 0 \n";
+
+                                            }
+                                        }
+                                    }
+
+
+                                }
+
+
+
+
                             }
                         }
                     }
+
+                    std::cout << "0x1826 characteristics discovery done" << std::endl;
                 }
                 count++;
             }
@@ -114,7 +179,7 @@ int main()
     deviceWatcher.Added([&](DeviceWatcher sender, DeviceInformation args)
         {
             printf("Hello, %ls!\n", args.Name().c_str());
-            if (args.Name() == L"Forerunner 245")
+            if (args.Name() == L"Wahoo KICKR 8E4F")
             {
                 device = args;
             }
@@ -151,12 +216,12 @@ int main()
 
             BLOperationAsync(device, service, chr).get();
 
-            chr.ValueChanged(function);
+            //chr.ValueChanged(function);
 
             std::cout << "Press any key to disconnect" << std::endl;
             key = _getwch();
 
-            chr.ValueChanged(function);
+            //chr.ValueChanged(function);
 
             service.Close();
 
